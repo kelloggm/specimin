@@ -18,6 +18,7 @@ import com.github.javaparser.ast.type.PrimitiveType;
 import com.github.javaparser.ast.type.Type;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.resolution.declarations.ResolvedConstructorDeclaration;
 import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import java.util.Iterator;
@@ -91,7 +92,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(MethodDeclaration methodDecl, Void p) {
-    ResolvedMethodDeclaration resolved = methodDecl.resolve();
+    ResolvedMethodDeclaration resolved;
+    try {
+      resolved = methodDecl.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // this method is not solved because it is not used by the target methods.
+      methodDecl.remove();
+      return super.visit(methodDecl, p);
+    }
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       insideTargetMethod = true;
       Visitable result = super.visit(methodDecl, p);
@@ -112,7 +120,14 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(ConstructorDeclaration constructorDecl, Void p) {
-    ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
+    ResolvedConstructorDeclaration resolved;
+    try {
+      resolved = constructorDecl.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // this constructor is not solved because it is not used by the target methods.
+      constructorDecl.remove();
+      return super.visit(constructorDecl, p);
+    }
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(constructorDecl, p);
     } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
@@ -126,6 +141,13 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration fieldDecl, Void p) {
+    try {
+      fieldDecl.resolve();
+    } catch (UnsolvedSymbolException e) {
+      // this field is not solved because it is not used by the target methods.
+      fieldDecl.remove();
+      return super.visit(fieldDecl, p);
+    }
     String classFullName = fieldDecl.resolve().declaringType().getQualifiedName();
     boolean isFinal = fieldDecl.isFinal();
     Iterator<VariableDeclarator> iterator = fieldDecl.getVariables().iterator();

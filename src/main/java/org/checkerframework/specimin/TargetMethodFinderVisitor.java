@@ -82,6 +82,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private final List<String> unfoundMethods;
 
   /**
+   * A list of Java files containing the declarations of unsolved symbols used by the target
+   * methods. The reason we have these kinds of files is that UnsolvedSymbolVisitor will only create
+   * synthetic files for files specified in the --targetFiles argument. At this point, we only
+   * include one case, which is the lacking of information about a method's return type causing that
+   * method to be unsolved. For other types, we should have enough data to create synthetic files
+   * for them at the point they are used (no need to look up their declarations).
+   */
+  private final Set<String> listOfUsedYetUnsolvedFile = new HashSet<>();
+
+  /**
    * Create a new target method finding visitor.
    *
    * @param methodNames the names of the target methods, the format
@@ -132,6 +142,15 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
    */
   public Set<String> getTargetMethods() {
     return targetMethods;
+  }
+
+  /**
+   * Get the list of Java files containing unsolved symbols used by target methods
+   *
+   * @return the value of listOfUsedYetUnsolvedFile
+   */
+  public Set<String> getListOfUsedYetUnsolvedFile() {
+    return listOfUsedYetUnsolvedFile;
   }
 
   @Override
@@ -261,8 +280,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   public Visitable visit(MethodCallExpr call, Void p) {
     if (insideTargetMethod) {
       usedMembers.add(call.resolve().getQualifiedSignature());
-      usedClass.add(call.resolve().getPackageName() + "." + call.resolve().getClassName());
-      ResolvedType methodReturnType = call.resolve().getReturnType();
+      // the full name of the class that contain this method
+      String classFullName = call.resolve().getPackageName() + "." + call.resolve().getClassName();
+      usedClass.add(classFullName);
+      ResolvedType methodReturnType;
+      try {
+        methodReturnType = call.resolve().getReturnType();
+      } catch (UnsolvedSymbolException e) {
+        listOfUsedYetUnsolvedFile.add(converClassNameToDirectory(classFullName));
+        return super.visit(call, p);
+      }
       if (methodReturnType instanceof ResolvedReferenceType) {
         usedClass.add(methodReturnType.asReferenceType().getQualifiedName());
       }
@@ -303,9 +330,16 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       try {
         // while the name of the method is declaringType(), it actually returns the class where the
         // field is declared
-        fullNameOfClass = expr.resolve().asField().declaringType().getQualifiedName();
+        ResolvedFieldDeclaration resolvedField = expr.resolve().asField();
+        fullNameOfClass = resolvedField.declaringType().getQualifiedName();
         usedMembers.add(fullNameOfClass + "#" + expr.getName().asString());
         usedClass.add(fullNameOfClass);
+        try {
+          ResolvedType typeOfField = resolvedField.getType();
+          usedClass.add(typeOfField.describe());
+        } catch (UnsolvedSymbolException e) {
+          listOfUsedYetUnsolvedFile.add(converClassNameToDirectory(fullNameOfClass));
+        }
       } catch (UnsolvedSymbolException e) {
         // if the a field is accessed in the form of a fully-qualified path, such as
         // org.example.A.b, then other components in the path apart from the class name and field
@@ -367,5 +401,22 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
       usedClass.add(classFullName);
       usedMembers.add(classFullName + "#" + expr.getNameAsString());
     }
+  }
+
+  /**
+   * Given the fully qualified name of a class, this method returns the directory of the Java file
+   * that contains the input class. The directory will be relative to the root directory of the
+   * input class.
+   *
+   * @param className the fully qualified name of a class
+   * @return the directory of the corresponding Java file
+   */
+  private String converClassNameToDirectory(String className) {
+    String fileName = className.replace(".", "/");
+    if (fileName.contains("$")) {
+      // remove the inner class part
+      fileName = fileName.substring(0, fileName.indexOf("$"));
+    }
+    return fileName + ".java";
   }
 }

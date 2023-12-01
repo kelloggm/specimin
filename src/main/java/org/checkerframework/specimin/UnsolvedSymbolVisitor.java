@@ -257,12 +257,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     return createdClass;
   }
 
-  /**
-   * Set gotException to false. This method is to be used at the beginning of each iteration of the
-   * visitor.
-   */
-  public void setExceptionToFalse() {
-    gotException = false;
+  /** Set gotException. */
+  public void setException(boolean gotException) {
+    this.gotException = gotException;
   }
 
   @Override
@@ -590,12 +587,9 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       updateClassSetWithQualifiedStaticMethodCall(
           methodFullyQualifiedCall, getArgumentsFromMethodCall(method));
     }
-    boolean needToSetException =
-        !canBeSolved(method)
-            || calledByAnUnsolvedSymbol(method)
-            || calledByAnIncompleteSyntheticClass(method)
-            || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
-    if (needToSetException) {
+    try {
+      method.resolve();
+    } catch (UnsolvedSymbolException e) {
       this.gotException = true;
     }
     return super.visit(method, p);

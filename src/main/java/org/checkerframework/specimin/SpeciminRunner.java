@@ -17,6 +17,7 @@ import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -110,41 +111,33 @@ public class SpeciminRunner {
      * The set of path of files that have been created by addMissingClass. We will delete all those
      * files in the end.
      */
-    Set<Path> createdClass = new HashSet<>();
-    while (addMissingClass.gettingException()) {
-      addMissingClass.setExceptionToFalse();
-      for (CompilationUnit cu : parsedTargetFiles.values()) {
-        addMissingClass.setImportStatement(cu.getImports());
-        // it's important to make sure that getDeclarations and addMissingClass will visit the same
-        // file for each execution of the loop
-        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
-        cu.accept(getDeclarations, null);
-        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
-        cu.accept(addMissingClass, null);
-      }
-      addMissingClass.updateSyntheticSourceCode();
-      createdClass.addAll(addMissingClass.getCreatedClass());
-      // since the root directory is updated, we need to update the SymbolSolver
-      TypeSolver newTypeSolver =
-          new CombinedTypeSolver(
-              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
-      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
-      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
-      parsedTargetFiles = new HashMap<>();
-      for (String targetFile : targetFiles) {
-        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
-      }
-    }
+    Set<Path> createdClass =
+        updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root);
+    // update the map of files and compilation units
+    parsedTargetFiles = getUpdateParsedTargetFiles(targetFiles, root);
     // Use a two-phase approach: the first phase finds the target(s) and records
     // what specifications they use, and the second phase takes that information
     // and removes all non-used code.
-
+    // This first phase contains three steps:
+    // 1: Have TargetMethodFinderVisitor run through the list of target files and find out if there
+    // is any additional file containing unsolved symbols used by target methods. Add those files to
+    // the list of target files
+    // 2: Have UnsolvedSymbolVisitor run through the list if target files
+    // 3: Have TargetMethodFinderVisitor through the list of target files again and find all classes
+    // and symbols used by target methods
     TargetMethodFinderVisitor finder = new TargetMethodFinderVisitor(targetMethodNames);
 
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
     }
-
+    Set<String> setOfUsedAndUnsolvedFile = finder.getListOfUsedYetUnsolvedFile();
+    parsedTargetFiles.putAll(getUpdateParsedTargetFiles(setOfUsedAndUnsolvedFile, root));
+    createdClass.addAll(
+        updateSyntheticFiles(addMissingClass, parsedTargetFiles, targetFiles, root));
+    parsedTargetFiles = getUpdateParsedTargetFiles(targetFiles, root);
+    for (CompilationUnit cu : parsedTargetFiles.values()) {
+      cu.accept(finder, null);
+    }
     List<String> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
@@ -233,6 +226,70 @@ public class SpeciminRunner {
     }
     // delete all the temporary files created by UnsolvedSymbolVisitor
     deleteFiles(createdClass);
+  }
+
+  /**
+   * This method update the value of parsedTargetFile with a list of target files.
+   *
+   * @param targetFiles a list of target files
+   * @param root root of the target files
+   * @throws IOException if anything bad happen
+   * @return parsedTargetFiles an updated version of parsedTargetFiles
+   */
+  public static Map<String, CompilationUnit> getUpdateParsedTargetFiles(
+      Collection<String> targetFiles, String root) throws IOException {
+    Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
+    for (String targetFile : targetFiles) {
+      parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+    }
+    return parsedTargetFiles;
+  }
+
+  /**
+   * This method will update synthetic files for unsolved symbols in classes from a list of target
+   * files.
+   *
+   * @param addMissingClass an UnsolvedSymbolVisitor instance to update synthetic files
+   * @param parsedTargetFiles a Map of the paths of target files and their corresponding compilation
+   *     units
+   * @param targetFiles a list of target files
+   * @param root the root directory of the target files
+   * @throws IOException if there is a problem with parsing files
+   * @return createdClass the path of synthetic files created
+   */
+  private static Set<Path> updateSyntheticFiles(
+      UnsolvedSymbolVisitor addMissingClass,
+      Map<String, CompilationUnit> parsedTargetFiles,
+      List<String> targetFiles,
+      String root)
+      throws IOException {
+    Set<Path> createdClass = new HashSet<>();
+    addMissingClass.setException(true);
+    while (addMissingClass.gettingException()) {
+      addMissingClass.setException(false);
+      for (CompilationUnit cu : parsedTargetFiles.values()) {
+        addMissingClass.setImportStatement(cu.getImports());
+        // it's important to make sure that getDeclarations and addMissingClass will visit the same
+        // file for each execution of the loop
+        FieldDeclarationsVisitor getDeclarations = new FieldDeclarationsVisitor();
+        cu.accept(getDeclarations, null);
+        addMissingClass.setFieldNameToClassNameMap(getDeclarations.getFieldAndItsClass());
+        cu.accept(addMissingClass, null);
+      }
+      addMissingClass.updateSyntheticSourceCode();
+      createdClass.addAll(addMissingClass.getCreatedClass());
+      // since the root directory is updated, we need to update the SymbolSolver
+      TypeSolver newTypeSolver =
+          new CombinedTypeSolver(
+              new ReflectionTypeSolver(), new JavaParserTypeSolver(new File(root)));
+      JavaSymbolSolver newSymbolSolver = new JavaSymbolSolver(newTypeSolver);
+      StaticJavaParser.getConfiguration().setSymbolResolver(newSymbolSolver);
+      parsedTargetFiles = new HashMap<>();
+      for (String targetFile : targetFiles) {
+        parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
+      }
+    }
+    return createdClass;
   }
 
   /**
