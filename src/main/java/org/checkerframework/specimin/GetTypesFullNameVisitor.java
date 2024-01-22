@@ -39,6 +39,9 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceDeclaration decl, Void p) {
     // Nested type classes don't have a separate class file.
     if (!decl.isNestedType()) {
+      // Caution: Calling .get() on an Optional without checking if it's present.
+      // This will throw NoSuchElementException if the Optional returned by getFullyQualifiedName()
+      // is empty.
       fileDirectory = decl.getFullyQualifiedName().get().replace(".", "/") + ".java";
       fileAndAssociatedTypes.put(fileDirectory, new HashSet<>());
     }

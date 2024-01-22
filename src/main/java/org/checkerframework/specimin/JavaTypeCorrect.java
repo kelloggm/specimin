@@ -113,6 +113,9 @@ class JavaTypeCorrect {
         }
       }
     } catch (Exception e) {
+      // TODO: We either want to leave a comment as to why we are ignoring
+      // TODO: or we need to throw an exception, such as a new RuntimeException
+      // Do we want to just print the exception? This seems incorrect.
       System.out.println(e);
     }
   }

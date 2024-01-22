@@ -110,6 +110,9 @@ public class SpeciminRunner {
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
     sourceRoot.tryToParse();
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+      // Caution: Calling .get() on an Optional without checking if it's present.
+      // This will throw NoSuchElementException if the Optional returned by getStorage()
+      // is empty.
       existingFiles.add(compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize());
     }
     UnsolvedSymbolVisitor addMissingClass = new UnsolvedSymbolVisitor(root, existingFiles);
@@ -285,15 +288,19 @@ public class SpeciminRunner {
         // Package declarations don't count for the purposes of
         // deciding whether to entirely remove a compilation unit.
         continue;
-      } else if (child instanceof ClassOrInterfaceDeclaration) {
-        ClassOrInterfaceDeclaration cdecl =
-            ((ClassOrInterfaceDeclaration) child).asClassOrInterfaceDeclaration();
-        if (!cdecl.getMembers().isEmpty()) {
-          return false;
-        }
-      } else {
-        return false;
       }
+
+      // If the node is a ClassOrInterfaceDeclaration, check if it has members.
+      if (child instanceof ClassOrInterfaceDeclaration) {
+        ClassOrInterfaceDeclaration cdecl = (ClassOrInterfaceDeclaration) child;
+        if (cdecl.getMembers().isEmpty()) {
+          continue;
+        }
+      }
+
+      // If the node is not a PackageDeclaration or a ClassOrInterfaceDeclaration,
+      // the compilation unit is not empty.
+      return false;
     }
     return true;
   }

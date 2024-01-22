@@ -30,6 +30,11 @@ public class FieldDeclarationsVisitor extends VoidVisitorAdapter<Void> {
 
   @Override
   public void visit(FieldDeclaration decl, Void p) {
+    // Safe use of .get(): In Java 11, FieldDeclaration is typically part of a
+    // ClassOrInterfaceDeclaration.
+    // The Optional returned by getParentNode() for a FieldDeclaration is usually not empty in
+    // standard scenarios.
+    // Calling .get() directly is generally safe and should not result in a NoSuchElementException.
     ClassOrInterfaceDeclaration classNode =
         (ClassOrInterfaceDeclaration) decl.getParentNode().get();
     SimpleName classNodeSimpleName = classNode.getName();

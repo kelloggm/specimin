@@ -165,7 +165,7 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
     if (decl.isNestedType()) {
       this.classFQName += "." + decl.getName().toString();
     } else {
-      if (!this.classFQName.equals("")) {
+      if (!this.classFQName.isEmpty()) {
         throw new UnsupportedOperationException(
             "Attempted to enter an unexpected kind of class: "
                 + decl.getFullyQualifiedName()
@@ -302,6 +302,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
         }
 
         if (paramType.isReferenceType()) {
+          // Caution: Calling .get() on an Optional without checking if it's present.
+          // This will throw NoSuchElementException if the Optional returned by getTypeDeclaration()
+          // is empty.
           String paraTypeFullName =
               paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
           updateUsedClassWithQualifiedClassName(paraTypeFullName);
@@ -447,6 +450,9 @@ public class TargetMethodFinderVisitor extends ModifierVisitor<Void> {
   private void resolveUnionType(UnionType type) {
     for (ReferenceType param : type.getElements()) {
       ResolvedType paramType = param.resolve();
+      // Caution: Calling .get() on an Optional without checking if it's present.
+      // This will throw NoSuchElementException if the Optional returned by getTypeDeclaration()
+      // is empty.
       String paraTypeFullName =
           paramType.asReferenceType().getTypeDeclaration().get().getQualifiedName();
       updateUsedClassWithQualifiedClassName(paraTypeFullName);

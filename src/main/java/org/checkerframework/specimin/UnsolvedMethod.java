@@ -78,29 +78,35 @@ public class UnsolvedMethod {
    */
   @Override
   public String toString() {
-    String arguments = "";
+    StringBuilder result = new StringBuilder();
+    StringBuilder arguments = new StringBuilder();
     for (int i = 0; i < parameterList.size(); i++) {
       String parameter = parameterList.get(i);
       String parameterName = "parameter" + i;
-      arguments = arguments + parameter + " " + parameterName;
+      arguments.append(parameter).append(" ").append(parameterName);
       if (i < parameterList.size() - 1) {
-        arguments = arguments + ", ";
+        arguments.append(", ");
       }
     }
-    String returnTypeInString = "";
-    if (!returnType.equals("")) {
-      returnTypeInString = returnType + " ";
-    }
-    String staticField = "";
-    if (isStatic) {
-      staticField = "static ";
-    }
-    return "\n    public "
-        + staticField
-        + returnTypeInString
-        + name
-        + "("
-        + arguments
-        + ") {\n        throw new Error();\n    }\n";
+
+    String returnTypeInString = returnType.isEmpty() ? "" : returnType + " ";
+    String staticField = isStatic ? "static " : "";
+
+    result
+        .append(System.lineSeparator())
+        .append("    public ")
+        .append(staticField)
+        .append(returnTypeInString)
+        .append(name)
+        .append("(")
+        .append(arguments)
+        .append(") {")
+        .append(System.lineSeparator())
+        .append("        throw new Error();")
+        .append(System.lineSeparator())
+        .append("    }")
+        .append(System.lineSeparator());
+
+    return result.toString();
   }
 }

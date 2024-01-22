@@ -156,13 +156,15 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
     ResolvedConstructorDeclaration resolved = constructorDecl.resolve();
     if (methodsToLeaveUnchanged.contains(resolved.getQualifiedSignature())) {
       return super.visit(constructorDecl, p);
-    } else if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
+    }
+
+    if (membersToEmpty.contains(resolved.getQualifiedSignature())) {
       constructorDecl.setBody(StaticJavaParser.parseBlock("{ throw new Error(); }"));
       return constructorDecl;
-    } else {
-      constructorDecl.remove();
-      return constructorDecl;
     }
+
+    constructorDecl.remove();
+    return constructorDecl;
   }
 
   @Override
@@ -226,8 +228,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
         default:
           throw new RuntimeException("Unexpected primitive type: " + fieldType);
       }
-    } else {
-      return new NullLiteralExpr();
     }
+    return new NullLiteralExpr();
   }
 }

@@ -191,9 +191,7 @@ public class UnsolvedClass {
       }
     }
 
-    for (String field : newFields) {
-      classFields.add(field);
-    }
+    classFields.addAll(newFields);
   }
 
   /**
@@ -211,7 +209,10 @@ public class UnsolvedClass {
     }
     sb.append(" {\n");
     for (String variableDeclarations : classFields) {
-      sb.append("    " + "public " + variableDeclarations + ";\n");
+      sb.append("    " + "public ")
+          .append(variableDeclarations)
+          .append(";")
+          .append(System.lineSeparator());
     }
     for (UnsolvedMethod method : methods) {
       sb.append(method.toString());
