@@ -117,7 +117,7 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       while (iterator.hasNext()) {
         ClassOrInterfaceType interfaceType = iterator.next();
         try {
-          String typeFullName = interfaceType.resolve().getQualifiedName();
+          String typeFullName = interfaceType.resolve().asReferenceType().getQualifiedName();
           if (!classesUsedByTargetMethods.contains(typeFullName)) {
             iterator.remove();
           }

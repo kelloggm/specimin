@@ -5,8 +5,9 @@ import com.github.javaparser.ast.CompilationUnit;
 import com.github.javaparser.ast.Node;
 import com.github.javaparser.ast.PackageDeclaration;
 import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.JavaSymbolSolver;
-import com.github.javaparser.symbolsolver.model.resolution.TypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.CombinedTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JavaParserTypeSolver;
@@ -255,7 +256,7 @@ public class SpeciminRunner {
       try {
         PrintWriter writer =
             new PrintWriter(targetOutputPath.toFile(), StandardCharsets.UTF_8.name());
-        writer.print(target.getValue());
+        writer.print(removeCommentsFromCompilationUnit(target.getValue()));
         writer.close();
       } catch (IOException e) {
         System.out.println("failed to write output file " + targetOutputPath);
@@ -351,6 +352,20 @@ public class SpeciminRunner {
         throw new RuntimeException("Unresolved file path: " + filePath);
       }
     }
+  }
+
+  /**
+   * Given a compilation unit, this method returns a no-comment version of that compilation unit.
+   *
+   * @param cu a compilation unit
+   * @return cu without any comments
+   */
+  private static CompilationUnit removeCommentsFromCompilationUnit(CompilationUnit cu) {
+    CompilationUnit cuWithNoComments = cu;
+    for (Comment child : cuWithNoComments.getAllComments()) {
+      child.remove();
+    }
+    return cuWithNoComments;
   }
 
   /**

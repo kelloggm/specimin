@@ -49,7 +49,7 @@ public class GetTypesFullNameVisitor extends ModifierVisitor<Void> {
   public Visitable visit(ClassOrInterfaceType type, Void p) {
     String typeFullName;
     try {
-      typeFullName = type.resolve().getQualifiedName();
+      typeFullName = type.resolve().asReferenceType().getQualifiedName();
     } catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       return super.visit(type, p);
     }
