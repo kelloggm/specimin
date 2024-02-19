@@ -20,25 +20,25 @@ import java.util.Set;
 class JavaTypeCorrect {
 
   /** List of the files to correct the types */
-  public Set<String> fileNameList;
+  public final Set<String> fileNameList;
 
   /**
    * The root directory of the files in the fileNameList. If there are more than one root
    * directories involved, consider using more than one instances of JavaTypeCorrect
    */
-  public String sourcePath;
+  public final String sourcePath;
 
   /**
    * This map is for type correcting. The key is the name of the current incorrect type, and the
    * value is the name of the desired correct type.
    */
-  private Map<String, String> typeToChange;
+  private final Map<String, String> typeToChange;
 
   /**
    * A map that associates the file directory with the set of fully qualified names of types used
    * within that file.
    */
-  private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
+  private final Map<String, Set<String>> fileAndAssociatedTypes;
 
   /**
    * Create a new JavaTypeCorrect instance. The directories of files in fileNameList are relative to

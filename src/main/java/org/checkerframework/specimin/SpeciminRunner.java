@@ -111,6 +111,9 @@ public class SpeciminRunner {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    // Intentional deep-copy used to check for membership later.
+    Set<String> originalTargetFiles = new HashSet<>(parsedTargetFiles.keySet());
+
     // the set of Java files already exist in the input codebase
     Set<Path> existingFiles = new HashSet<>();
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
@@ -172,11 +175,11 @@ public class SpeciminRunner {
     List<String> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
-          "Specimin could not locate the following target methods in the target files: "
+          "Specimin could not locate the following target methods in   the target files: "
               + String.join(", ", unfoundMethods));
     }
 
-    Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
+    Set<String> relatedClasses = new HashSet<>(parsedTargetFiles.keySet());
     // add all files related to the targeted methods
     for (String classFullName : finder.getUsedClass()) {
       String directoryOfFile = classFullName.replace(".", "/") + ".java";
@@ -184,7 +187,7 @@ public class SpeciminRunner {
       // classes from JDK are automatically on the classpath, so UnsolvedSymbolVisitor will not
       // create synthetic files for them
       if (thisFile.exists()) {
-        relatedClass.add(directoryOfFile);
+        relatedClasses.add(directoryOfFile);
       }
     }
     GetTypesFullNameVisitor getTypesFullNameVisitor = new GetTypesFullNameVisitor();
@@ -195,16 +198,16 @@ public class SpeciminRunner {
         getTypesFullNameVisitor.getFileAndAssociatedTypes();
     // correct the types of all related files before adding them to parsedTargetFiles
     JavaTypeCorrect typeCorrecter =
-        new JavaTypeCorrect(root, relatedClass, filesAndAssociatedTypes);
+        new JavaTypeCorrect(root, relatedClasses, filesAndAssociatedTypes);
     typeCorrecter.correctTypesForAllFiles();
     Map<String, String> typesToChange = typeCorrecter.getTypeToChange();
     addMissingClass.updateTypes(typesToChange);
 
-    for (String directory : relatedClass) {
-      // directories already in parsedTargetFiles are original files in the root directory, we are
-      // not supposed to update them.
-      if (!parsedTargetFiles.containsKey(directory)) {
-        parsedTargetFiles.put(directory, parseJavaFile(root, directory));
+    for (String relatedClass : relatedClasses) {
+      // Related classes already in parsedTargetFiles are original files in the root directory,
+      // and we are not supposed to update them.
+      if (!originalTargetFiles.contains(relatedClass)) {
+        parsedTargetFiles.put(relatedClass, parseJavaFile(root, relatedClass));
       }
     }
     InheritancePreserveVisitor inheritancePreserve =
