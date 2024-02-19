@@ -3,8 +3,11 @@ package org.checkerframework.specimin;
 import com.google.common.base.Splitter;
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -83,9 +86,25 @@ class JavaTypeCorrect {
    * @param filePath the directory of the file to be analyzed
    */
   public void runJavacAndUpdateTypes(String filePath) {
+    Path outputDir;
+    try {
+      outputDir = Files.createTempDirectory("specimin-javatypecorrect");
+    } catch (IOException e) {
+      throw new RuntimeException("failed to create a temporary directory");
+    }
+
     try {
       String command = "javac";
-      String[] arguments = {command, "-sourcepath", sourcePath, sourcePath + "/" + filePath};
+      // Note: -d to a tempdir is used to avoid generating .class files amongst the user's files
+      // when compilation succeeds.
+      String[] arguments = {
+        command,
+        "-d",
+        outputDir.toAbsolutePath().toString(),
+        "-sourcepath",
+        sourcePath,
+        sourcePath + "/" + filePath
+      };
       ProcessBuilder processBuilder = new ProcessBuilder(arguments);
       processBuilder.redirectErrorStream(true);
       Process process = processBuilder.start();
