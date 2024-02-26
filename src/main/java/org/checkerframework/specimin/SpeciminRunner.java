@@ -126,6 +126,7 @@ public class SpeciminRunner {
     // files in the end.
     Set<Path> createdClass = new HashSet<>();
     while (addMissingClass.gettingException()) {
+      System.out.println("going around the main loop");
       addMissingClass.setExceptionToFalse();
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         addMissingClass.setImportStatement(cu.getImports());

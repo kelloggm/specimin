@@ -80,10 +80,10 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
-   * Flag for whether or not to print debugging output. Should always be false except when you
-   * are actively debugging.
+   * Flag for whether or not to print debugging output. Should always be false except when you are
+   * actively debugging.
    */
-  private static final boolean DEBUG = false;
+  private static final boolean DEBUG = true;
 
   /**
    * This map associates class names with their respective superclasses. The keys in this map
@@ -394,6 +394,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     NodeList<ClassOrInterfaceType> extendedAndImplementedTypes = node.getExtendedTypes();
     extendedAndImplementedTypes.addAll(implementedTypes);
     for (ClassOrInterfaceType implementedOrExtended : extendedAndImplementedTypes) {
+      System.out.println("considering implemented or extended type: " + implementedOrExtended);
       String typeName = implementedOrExtended.getName().asString();
       String packageName = getPackageFromClassName(typeName);
       String qualifiedName = packageName + "." + typeName;
@@ -802,7 +803,8 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       return super.visit(method, p);
     }
     potentialUsedMembers.add(method.getName().asString());
-    if (canBeSolved(method) && isFromAJarFile(method)) {
+    boolean canBeSolved = canBeSolved(method);
+    if (canBeSolved && isFromAJarFile(method)) {
       updateClassesFromJarSourcesForMethodCall(method);
       return super.visit(method, p);
     }
@@ -810,7 +812,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     if (!canSolveParameters(method)) {
       return super.visit(method, p);
     }
-    if (isASuperCall(method) && !canBeSolved(method)) {
+    if (isASuperCall(method) && !canBeSolved) {
       updateSyntheticClassForSuperCall(method);
       return super.visit(method, p);
     }
@@ -853,12 +855,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
         }
       }
     }
-    boolean needToSetException =
-        !canBeSolved(method)
-            || calledByAnUnsolvedSymbol(method)
-            || calledByAnIncompleteClass(method)
-            || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
-    if (needToSetException) {
+
+    // Though this structure looks a bit silly, it is intentional
+    // that these 4 calls to getException() produce different stacktraces,
+    // which is very helpful for debugging infinite loops.
+    if (!canBeSolved) {
+      gotException();
+    } else if (calledByAnUnsolvedSymbol(method)) {
+      gotException();
+    } else if (calledByAnIncompleteClass(method)) {
+      gotException();
+    } else if (isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method)) {
       gotException();
     }
     return super.visit(method, p);
@@ -907,7 +914,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           getPackageFromClassName(typeExpr.getNameAsString()) + "." + typeExpr.getNameAsString();
       if (classfileIsInOriginalCodebase(qualifiedName)) {
         addedTargetFiles.add(qualifiedNameToFilePath(qualifiedName));
-        gotException = true;
+        gotException();
         return super.visit(typeExpr, p);
       }
 
@@ -938,7 +945,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       classToUpdate.setNumberOfTypeVariables(numberOfArguments);
       updateMissingClass(classToUpdate);
-      gotException = true;
+      gotException();
     }
     return super.visit(typeExpr, p);
   }
@@ -966,7 +973,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     catch (UnsolvedSymbolException | UnsupportedOperationException e) {
       if (!parameter.getType().isUnknownType()) {
         handleParameterResolveFailure(parameter);
-        gotException = true;
+        gotException();
       }
     }
     return super.visit(parameter, p);
@@ -1066,6 +1073,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           }
         }
         if (methodDeclaredTypesOfParameters.equals(methodTypesOfParameters)) {
+          // TODO: this test is too strict, because it does not consider subtyping.
           return true;
         }
       }
@@ -1760,6 +1768,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       expr.calculateResolvedType();
       return true;
     } catch (Exception e) {
+      System.out.println(e);
       return false;
     }
   }
@@ -2368,13 +2377,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   }
 
   /**
-   * This indirection is here to make it easier to debug infinite loops.
-   * Never set gotException directly, but instead call this function.
+   * This indirection is here to make it easier to debug infinite loops. Never set gotException
+   * directly, but instead call this function.
    */
   private void gotException() {
     if (DEBUG) {
       StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
-      System.out.println("setting gotException to true from: " + stackTraceElements[1]);
+      System.out.println("setting gotException to true from: " + stackTraceElements[2]);
     }
     this.gotException = true;
   }

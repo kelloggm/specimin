@@ -44,11 +44,11 @@ class JavaTypeCorrect {
    */
   private Map<String, Set<String>> fileAndAssociatedTypes = new HashMap<>();
 
-  /** 
-    * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
-    * which is safe because the worst thing that might happen is that an extra sythetic class might
-    * accidentally extend Throwable.
-    */
+  /**
+   * Synthetic types that need to extend Throwable. Note that the stored Strings are simple names,
+   * which is safe because the worst thing that might happen is that an extra sythetic class might
+   * accidentally extend Throwable.
+   */
   private Set<String> typesThatExtendThrowable = new HashSet<>();
 
   /**
