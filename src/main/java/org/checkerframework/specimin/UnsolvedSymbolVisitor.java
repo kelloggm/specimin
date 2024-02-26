@@ -80,6 +80,12 @@ import org.checkerframework.checker.signature.qual.FullyQualifiedName;
 public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
+   * Flag for whether or not to print debugging output. Should always be false except when you
+   * are actively debugging.
+   */
+  private static final boolean DEBUG = false;
+
+  /**
    * This map associates class names with their respective superclasses. The keys in this map
    * represent the classes of the currently visited file. Due to the potential presence of inner
    * classes, there may be multiple pairs of class and superclass entries in this map. This map can
@@ -399,7 +405,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           // strictly speaking, there is no exception here. But we set gotException to true so that
           // UnsolvedSymbolVisitor will run at least one more iteration to visit the newly added
           // file.
-          this.gotException = true;
+          gotException();
         }
         addedTargetFiles.add(filePath);
       } else {
@@ -646,11 +652,11 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
           nameExprReferenceType.getAllAncestors();
           // check if all the type parameters are resolved.
           if (!hasResolvedTypeParameters(nameExprReferenceType)) {
-            this.gotException = true;
+            gotException();
           }
         }
       } catch (UnsolvedSymbolException e) {
-        this.gotException = true;
+        gotException();
       }
       return super.visit(node, arg);
     }
@@ -784,7 +790,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       // for a qualified name field access such as org.sample.MyClass.field, org.sample will also be
       // considered FieldAccessExpr.
       if (isAClassPath(node.getScope().toString())) {
-        this.gotException = true;
+        gotException();
       }
     }
     return super.visit(node, p);
@@ -853,7 +859,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             || calledByAnIncompleteClass(method)
             || isAnUnsolvedStaticMethodCalledByAQualifiedClassName(method);
     if (needToSetException) {
-      this.gotException = true;
+      gotException();
     }
     return super.visit(method, p);
   }
@@ -979,7 +985,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
       return super.visit(newExpr, p);
     }
-    this.gotException = true;
+    gotException();
     try {
       List<String> argumentsCreation = getArgumentsFromObjectCreation(newExpr);
       UnsolvedMethod creationMethod = new UnsolvedMethod("", type, argumentsCreation);
@@ -2359,5 +2365,17 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     } else {
       throw new RuntimeException("Unfound parent for this class: " + className);
     }
+  }
+
+  /**
+   * This indirection is here to make it easier to debug infinite loops.
+   * Never set gotException directly, but instead call this function.
+   */
+  private void gotException() {
+    if (DEBUG) {
+      StackTraceElement[] stackTraceElements = Thread.currentThread().getStackTrace();
+      System.out.println("setting gotException to true from: " + stackTraceElements[1]);
+    }
+    this.gotException = true;
   }
 }
