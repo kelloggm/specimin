@@ -32,6 +32,7 @@ import com.github.javaparser.resolution.declarations.ResolvedMethodDeclaration;
 import com.github.javaparser.resolution.types.ResolvedType;
 import java.util.HashSet;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.checkerframework.checker.signature.qual.FullyQualifiedName;
@@ -84,6 +85,9 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    */
   private final Set<String> resolvedYetStuckMethodCall;
 
+  /** This map connects a class and its unresolved interface. */
+  private Map<String, String> classAndUnresolvedInterface;
+
   /**
    * Creates the pruner. All members this pruner encounters other than those in its input sets will
    * be removed entirely. For methods in both arguments, the Strings should be in the format
@@ -97,15 +101,18 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
    * @param classesUsedByTargetMethods the classes used by target methods
    * @param resolvedYetStuckMethodCall set of methods that are resolved yet can not be solved by
    *     JavaParser
+   * @param classAndUnresolvedInterface connects a class to its corresponding unresolved interface
    */
   public PrunerVisitor(
       Set<String> methodsToKeep,
       Set<String> membersToEmpty,
       Set<String> classesUsedByTargetMethods,
-      Set<String> resolvedYetStuckMethodCall) {
+      Set<String> resolvedYetStuckMethodCall,
+      Map<String, String> classAndUnresolvedInterface) {
     this.methodsToLeaveUnchanged = methodsToKeep;
     this.membersToEmpty = membersToEmpty;
     this.classesUsedByTargetMethods = classesUsedByTargetMethods;
+    this.classAndUnresolvedInterface = classAndUnresolvedInterface;
     Set<String> toRemove = new HashSet<>();
     for (String classUsedByTargetMethods : classesUsedByTargetMethods) {
       if (classUsedByTargetMethods.contains("<")) {
@@ -187,7 +194,8 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
       }
     }
     decl = minimizeTypeParameters(decl);
-    if (!classesUsedByTargetMethods.contains(decl.resolve().getQualifiedName())) {
+    String classQualifiedName = decl.resolve().getQualifiedName();
+    if (!classesUsedByTargetMethods.contains(classQualifiedName)) {
       decl.remove();
       return decl;
     }
@@ -200,6 +208,22 @@ public class PrunerVisitor extends ModifierVisitor<Void> {
           String typeFullName = interfaceType.resolve().getQualifiedName();
           if (!classesUsedByTargetMethods.contains(typeFullName)) {
             iterator.remove();
+          }
+          // all unresolvable interfaces that need to be removed belong to the Java package.
+          if (!typeFullName.startsWith("java.")) {
+            continue;
+          }
+          for (String classNeedInterfaceRemoved : classAndUnresolvedInterface.keySet()) {
+            // since classNeedInterfaceRemoved can be in the form of a simple name
+            if (classQualifiedName.endsWith(classNeedInterfaceRemoved)) {
+              if (classAndUnresolvedInterface
+                  .get(classNeedInterfaceRemoved)
+                  .equals(interfaceType.getNameAsString())) {
+                // This code assumes that the likelihood of two different classes with the same
+                // simple name implementing the same interface is low.
+                iterator.remove();
+              }
+            }
           }
         } catch (UnsolvedSymbolException e) {
           iterator.remove();
