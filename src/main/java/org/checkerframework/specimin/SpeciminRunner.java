@@ -76,6 +76,8 @@ public class SpeciminRunner {
       jarFiles = getJarFiles(jarDirectory);
     }
 
+    jarFiles.stream().forEach(System.out::println);
+
     performMinimization(
         options.valueOf(rootOption),
         options.valuesOf(targetFilesOption),

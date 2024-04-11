@@ -43,16 +43,26 @@ jobs:
           python main.py
       - name: Check evaluation status
         run: diff -uw src/main/resources/target_status.json specimin-evaluation/ISSUES/target_status.json
-      - name: Compile minimized programs
-        run: |
-          cd specimin-evaluation
-          sh check_compilation.sh
       - name: Check targets compile status
         run: |
           cd specimin-evaluation
-          sh check_compilation.sh
+          sh check_compilation.sh 1
           cd ..
           diff -uw src/main/resources/min_program_compile_status.json specimin-evaluation/ISSUES/compile_status.json
       - name: Check preservation status
         run: diff -uw src/main/resources/preservation_status.json specimin-evaluation/ISSUES/preservation_status.json
-          
+      - name: Jar mode evaluation script execution
+        run: |
+          cd specimin-evaluation
+          echo "specimin path-> $SPECIMIN"
+          python main.py -j true
+      - name: Jar mode specimin execution status check
+        run: diff -uw src/main/resources/jar_mode_target_status.json specimin-evaluation/ISSUES/jar_target_status.json
+      - name: Jar mode targets compile status check
+        run: |
+          cd specimin-evaluation
+          sh check_jar_mode_compilation.sh 2
+          cd ..
+          diff -uw src/main/resources/jar_mode_min_program_compilation_status.json specimin-evaluation/ISSUES/jar_compile_status.json
+      - name: Jar mode preservation status check
+        run: diff -uw src/main/resources/jar_mode_preservation_status.json specimin-evaluation/ISSUES/jar_preservation_status.json

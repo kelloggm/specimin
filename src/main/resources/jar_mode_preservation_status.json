@@ -1,0 +1,22 @@
+{
+  "cf-1291": "FAIL",
+  "cf-6282": "PASS",
+  "cf-6077": "FAIL",
+  "cf-6060": "FAIL",
+  "cf-6030": "FAIL",
+  "cf-6019": "FAIL",
+  "cf-4614": "PASS",
+  "cf-3850": "FAIL",
+  "cf-577": "FAIL",
+  "cf-3032": "FAIL",
+  "cf-3619": "FAIL",
+  "cf-3021": "PASS",
+  "cf-3020": "FAIL",
+  "cf-3022": "PASS",
+  "cf-691": "FAIL",
+  "Issue689": "PASS",
+  "cf-6388": "FAIL",
+  "cf-3025": "FAIL",
+  "jdk-8319461": "FAIL",
+  "jdk-8288590": "FAIL"
+}
