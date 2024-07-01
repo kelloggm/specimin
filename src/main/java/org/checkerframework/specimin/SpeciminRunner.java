@@ -49,9 +49,26 @@ public class SpeciminRunner {
    * @throws IOException if there is an exception
    */
   public static void main(String... args) throws IOException {
+	  
+	 /*
+	  * OptionParser class provides methods that will help us to define and parse command-line options.
+	  * For example: CLI command>>> tar -czvf archive.tar.gz /home/user
+	  * here -czvf are the options that help us understand specific ways we can run this command and/or how the output is supposed to be.
+	  * while "archive.tar.gz" and "/home/user" are arguments that we will need to execute this commands using the above options
+
+
+	  * Please refer to accept command in class definition to understand further.
+	  */
     OptionParser optionParser = new OptionParser();
-    // This option is the root of the source directory of the target files. It is used
-    // for symbol resolution from source code and to organize the output directory.
+    
+    
+    /*
+     * This option is the root of the source directory of the target files. It is used 
+     * for symbol resolution from source code and to organize the output directory.
+     * 
+     * SPECIMIN will run as follows for a program called my program>>>>> myprogram --root /path/to/source
+     * here "root" is the option indicating the following argument "/path/to/source" is the path to root of source code
+     */  
     OptionSpec<String> rootOption = optionParser.accepts("root").withRequiredArg();
 
     var jar = optionParser.accepts("jarPath").withOptionalArg().ofType(String.class);
@@ -155,54 +172,111 @@ public class SpeciminRunner {
       String outputDirectory,
       Set<Path> createdClass)
       throws IOException {
-    // To facilitate string manipulation in subsequent methods, ensure that 'root' ends with a
-    // trailing slash.
+	  
+	  
+	  
+/*
+ * ================================================================================STEP 1: Initialization:============================================================================================
+   >>> It ensures that the root directory ends with a trailing slash for string manipulation purposes.
+ */
     if (!root.endsWith("/")) {
       root = root + "/";
     }
-
+    
+    /*
+     * =============================================================================STEP 2: Setting Static Solver:====================================================================================
+       >>> This method sets up something called a "symbol solver." 
+           Think of it like a helper that understands and can find definitions of classes, methods, and variables in your code.
+      	   This method sets up a system that helps the parser understand and find definitions in our Java code, 
+           including our project's source code and any additional libraries you are using ( JAVA 17 version libraries).       
+     */
     updateStaticSolver(root, jarPaths);
 
-    // Keys are paths to files, values are parsed ASTs
+ 
+    /*
+     * =============================================================================STEP 3: Parsing Target Files:====================================================================================
+       >>> It parses the target Java files specified in the targetFiles list and stores them in a map (parsedTargetFiles). 
+       	   This map associates file paths <KEY> with parsed Abstract Syntax Trees (ASTs) of the Java files <VALUE>.
+           Abstract syntax trees are data structures widely used in compilers to represent the structure of program code.     
+       >>>  WHAT IS A COMPILATION UNIT?
+              A CompilationUnit is a data structure used in Java programming to represent the entire content of a Java source file.
+              When we use a parser like StaticJavaParser to read a .java file, it creates a CompilationUnit 
+              that represents all the content of that file in a structured way. 
+              This allows our program to understand and work with the code without just treating it as plain text.
+              We can think of it as a digital blueprint of the Java file.
+     */
     Map<String, CompilationUnit> parsedTargetFiles = new HashMap<>();
     for (String targetFile : targetFiles) {
       parsedTargetFiles.put(targetFile, parseJavaFile(root, targetFile));
     }
 
+    /*
+     * ==============================================================================STEP 4: Decompiling JAR Files (Optional):========================================================================
+       >>> If JAR paths are provided (jarPaths list is not empty), it decompiles the JAR files to Java source files in the root directory using the ConsoleDecompiler tool.
+     */
     if (!jarPaths.isEmpty()) {
       List<String> argsToDecompile = new ArrayList<>();
-      argsToDecompile.add("--silent");
-      argsToDecompile.addAll(jarPaths);
-      argsToDecompile.add(root);
+      argsToDecompile.add("--silent");// why is this required?
+      argsToDecompile.addAll(jarPaths);// all libraries
+      argsToDecompile.add(root);// main source code with issue
       ConsoleDecompiler.main(argsToDecompile.toArray(new String[0]));
       // delete unneccessary legal files
       FileUtils.deleteDirectory(new File(root + "META-INF"));
     }
 
-    // the set of Java classes in the original codebase mapped with their corresponding Java files.
+    /*
+     * ===================================================================================STEP 5: Mapping Classes:====================================================================================
+       >>> WHAT IS A PRMARY CLASS?
+       		A primary class is a class that has the same name as the Java file where the class is declared.	
+       >>> HOW MAPPING WORKS BELOW:		
+       1. Maps Initialization: We initialize two maps: 
+            a. existingClassesToFilePath to keep track of class names and their file paths.
+            b. nonPrimaryClassesToPrimaryClass to map non-primary classes (classes not named after their file) to their primary classes.
+       2. SourceRoot Setup: We use SourceRoot to manage and parse all Java files in the given root directory.
+       3. Parsing Java Files: We call tryToParse() to parse all Java files in the root directory.
+       4. Processing Each Java File:
+          4.1 We get the file path of the current Java file.
+          4.2 We check if the file has a primary type (main class) and get its fully qualified name if it exists.
+          4.3 We loop through all class or interface declarations in the file:
+               4.3.1 If the class has a fully qualified name, we store its name and file path in the existingClassesToFilePath map.
+               4.3.2 If the class is not the primary class, we map it to its primary class in the nonPrimaryClassesToPrimaryClass map.
+          4.4 We also loop through all enum declarations in the file and store their names and file paths in the existingClassesToFilePath map.
+     */
+
     Map<String, Path> existingClassesToFilePath = new HashMap<>();
-    // This map connects the fully-qualified names of non-primary classes with the fully-qualified
-    // names of their corresponding primary classes. A primary
-    // class is a class that has the same name as the Java file where the class is declared.
     Map<String, String> nonPrimaryClassesToPrimaryClass = new HashMap<>();
+    
+ // Initialize SourceRoot to help with parsing the Java files in the specified root directory
     SourceRoot sourceRoot = new SourceRoot(Path.of(root));
+    
+ // Try to parse all Java files in the root directory
     sourceRoot.tryToParse();
+    
+ // Loop through all parsed CompilationUnits (each representing a Java file)
     for (CompilationUnit compilationUnit : sourceRoot.getCompilationUnits()) {
+    	// Get the path of the current Java file being processed
       Path pathOfCurrentJavaFile =
           compilationUnit.getStorage().get().getPath().toAbsolutePath().normalize();
+      
       String primaryTypeQualifiedName = "";
+      
+   // Check if the primary type is present in the CompilationUnit
       if (compilationUnit.getPrimaryType().isPresent()) {
-        // the get() is safe because primary type here is definitely not a local declaration,
+    	// Get the fully qualified name of the primary type (main class) if it is present
+        // Note:the get() is safe because primary type here is definitely not a local declaration,
         // which does not have a fully-qualified name.
         primaryTypeQualifiedName =
             compilationUnit.getPrimaryType().get().getFullyQualifiedName().get();
       }
+      
+   // Loop through all class or interface declarations in the current CompilationUnit
       for (ClassOrInterfaceDeclaration declaredClass :
           compilationUnit.findAll(ClassOrInterfaceDeclaration.class)) {
         if (declaredClass.getFullyQualifiedName().isPresent()) {
           String declaredClassQualifiedName =
               declaredClass.getFullyQualifiedName().get().toString();
           existingClassesToFilePath.put(declaredClassQualifiedName, pathOfCurrentJavaFile);
+          
           // which means this class is not a primary class, and there is a primary class.
           if (!"".equals(primaryTypeQualifiedName)
               && !declaredClassQualifiedName.equals(primaryTypeQualifiedName)) {
@@ -216,6 +290,12 @@ public class SpeciminRunner {
             enumDeclaration.getFullyQualifiedName().get(), pathOfCurrentJavaFile);
       }
     }
+
+    /*
+     * ==============================================================================STEP 6: Symbol Resolution and correcting Java types:========================================================================
+       >>> Visitors for Symbol Resolution:It initializes and utilizes various visitor classes (UnsolvedSymbolVisitor, JavaTypeCorrect, etc.)
+           to resolve unsolved symbols, correct Java types, handle inheritance, and remove unsolved annotations.
+     */
     UnsolvedSymbolVisitor addMissingClass =
         new UnsolvedSymbolVisitor(
             root, existingClassesToFilePath, targetMethodNames, targetFieldNames);
@@ -342,35 +422,61 @@ public class SpeciminRunner {
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(enumVisitor, null);
     }
+    
+    /*
+     * ==============================================================================STEP 7: Method Pruning :========================================================================
+       >>> It prunes methods and fields that are not used by the target methods or classes, removing unnecessary code.
+       >>> HOW BELOW CODE WORKS?
+       		1. TargetMethodFinderVisitor: This part finds the methods and fields we're targeting in the parsed Java files.
+			2. Unfound Methods: If there are any methods that couldn't be found, it throws an error.
+			3. SolveMethodOverridingVisitor: This part resolves issues with method overriding.
+			4. Related Classes: It collects and parses related Java files that might affect or be affected by the target methods.
+			5. Inheritance Information: This loop ensures we find and preserve inheritance information for all relevant classes.
+			6. Annotation Removal: Removes unsolved annotations from the newly added files.
+			7. MustImplementMethodsVisitor: Ensures that all required methods are implemented in the classes.
+			8. PrunerVisitor: Removes methods that are not needed anymore.
+			9. Directory Creation and Output: Ensures directories are created as needed and processes the final target files for output, skipping unnecessary ones.
+     */
 
-    // Use a two-phase approach: the first phase finds the target(s) and records
-    // what specifications they use, and the second phase takes that information
-    // and removes all non-used code.
-
+ // Create a TargetMethodFinderVisitor instance. This will help us to find target methods and fields in the parsed files
     TargetMethodFinderVisitor finder =
         new TargetMethodFinderVisitor(
             targetMethodNames,
             targetFieldNames,
             nonPrimaryClassesToPrimaryClass,
             enumVisitor.getUsedEnum());
+    
+    
+    //-------------------------------------------------------------------------------Look for unfound methods-----------------------------------------------------------------------------------------
 
+    
+    // We go through each parsed Java file and let the finder look for target methods and fields
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(finder, null);
     }
-
+ // If there are any unfound methods, throw an exception with details
     Map<String, Set<String>> unfoundMethods = finder.getUnfoundMethods();
     if (!unfoundMethods.isEmpty()) {
       throw new RuntimeException(
           "Specimin could not locate the following target methods in the target files:\n"
               + unfoundMethodsTable(unfoundMethods));
     }
+ 
+    
+    
+  //-------------------------------------------------------------------------------Fix method overriding-----------------------------------------------------------------------------------------
+ 
+    
+    
+ // We use a SolveMethodOverridingVisitor to resolve method overriding issues
     SolveMethodOverridingVisitor solveMethodOverridingVisitor =
         new SolveMethodOverridingVisitor(
             finder.getTargetMethods(), finder.getUsedMembers(), finder.getUsedTypeElement());
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(solveMethodOverridingVisitor, null);
     }
-
+ // Create a set to keep track of related classes (classes related to target methods)
+ // If the file exists (and is not a JDK class), add it to the related classes
     Set<String> relatedClass = new HashSet<>(parsedTargetFiles.keySet());
     // add all files related to the targeted methods
     for (String classFullName : solveMethodOverridingVisitor.getUsedClass()) {
@@ -383,6 +489,12 @@ public class SpeciminRunner {
       }
     }
 
+    
+    //-------------------------------------------------------------------------------Parsing additional Java files-----------------------------------------------------------------------------------------
+
+    
+    
+ // Parse any additional related Java files that have not been parsed yet
     for (String directory : relatedClass) {
       // directories already in parsedTargetFiles are original files in the root directory, we are
       // not supposed to update them.
@@ -395,14 +507,25 @@ public class SpeciminRunner {
         }
       }
     }
+    
+    
+    //-------------------------------------------------------------------------------Handling Class inheritance-----------------------------------------------------------------------------------------
+
+    
+    
+ // Find and preserve class inheritance information
     Set<String> classToFindInheritance = solveMethodOverridingVisitor.getUsedClass();
     Set<String> totalSetOfAddedInheritedClasses = classToFindInheritance;
     InheritancePreserveVisitor inheritancePreserve;
     while (!classToFindInheritance.isEmpty()) {
       inheritancePreserve = new InheritancePreserveVisitor(classToFindInheritance);
+      
+   // Go through each parsed Java file and let inheritancePreserve process it
       for (CompilationUnit cu : parsedTargetFiles.values()) {
         cu.accept(inheritancePreserve, null);
       }
+      
+   // Add new classes found by inheritancePreserve
       for (String targetFile : inheritancePreserve.getAddedClasses()) {
         String directoryOfFile = targetFile.replace(".", "/") + ".java";
         File thisFile = new File(root + directoryOfFile);
@@ -422,9 +545,15 @@ public class SpeciminRunner {
       inheritancePreserve.emptyAddedClasses();
     }
 
+ // Update the set of used classes with the newly added inherited classes
     Set<String> updatedUsedClass = solveMethodOverridingVisitor.getUsedClass();
     updatedUsedClass.addAll(totalSetOfAddedInheritedClasses);
 
+    
+    //-----------------------------------------------------------------Removing Annotations from newly added classes----------------------------------------------------------------------------------
+
+    
+    
     // remove the unsolved annotations in the newly added files.
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(annoRemover, null);
@@ -432,16 +561,28 @@ public class SpeciminRunner {
 
     updatedUsedClass.addAll(annoRemover.getSolvedAnnotationFullName());
 
+    
+    //-----------------------------------------------------------------Ensuring Required methods are implemented----------------------------------------------------------------------------------
+
+    
+    
+ // Create a MustImplementMethodsVisitor to ensure required methods are implemented
     MustImplementMethodsVisitor mustImplementMethodsVisitor =
         new MustImplementMethodsVisitor(
             solveMethodOverridingVisitor.getUsedMembers(),
             updatedUsedClass,
             existingClassesToFilePath);
-
+ // Go through each parsed Java file and let mustImplementMethodsVisitor process it
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(mustImplementMethodsVisitor, null);
     }
 
+    
+    //-------------------------------------------------------------------------------Removing unused classes-------------------------------------------------------------------------------------
+
+    
+    
+ // Create a PrunerVisitor to remove unused methods
     PrunerVisitor methodPruner =
         new PrunerVisitor(
             finder.getTargetMethods(),
@@ -454,7 +595,11 @@ public class SpeciminRunner {
     for (CompilationUnit cu : parsedTargetFiles.values()) {
       cu.accept(methodPruner, null);
     }
+   
+   //------------------------------------------------------------------------------- Directory Creation and Output-------------------------------------------------------------------------------------
 
+    	
+    	
     // cache to avoid called Files.createDirectories repeatedly with the same arguments
     Set<Path> createdDirectories = new HashSet<>();
 
@@ -481,6 +626,14 @@ public class SpeciminRunner {
           continue;
         }
       }
+      
+      /*
+       * ==============================================================================STEP 8: Output Processing :========================================================================
+         >>> It prepares and writes the modified Java files (after minimization) to the specified outputDirectory.
+       */
+
+   
+      
       Path targetOutputPath = Path.of(outputDirectory, target.getKey());
       // Create any parts of the directory structure that don't already exist.
       Path dirContainingOutputFile = targetOutputPath.getParent();
