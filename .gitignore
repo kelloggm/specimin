@@ -32,3 +32,6 @@ build
 
 # macOS specific file
 .DS_Store
+
+# VSCode files
+bin/

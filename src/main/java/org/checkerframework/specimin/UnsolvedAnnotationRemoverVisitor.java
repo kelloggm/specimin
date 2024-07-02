@@ -8,6 +8,7 @@ import com.github.javaparser.ast.expr.NormalAnnotationExpr;
 import com.github.javaparser.ast.expr.SingleMemberAnnotationExpr;
 import com.github.javaparser.ast.visitor.ModifierVisitor;
 import com.github.javaparser.ast.visitor.Visitable;
+import com.github.javaparser.resolution.UnsolvedSymbolException;
 import com.github.javaparser.symbolsolver.resolution.typesolvers.JarTypeSolver;
 import java.io.IOException;
 import java.util.HashMap;
@@ -100,18 +101,33 @@ public class UnsolvedAnnotationRemoverVisitor extends ModifierVisitor<Void> {
    */
   public void processAnnotations(AnnotationExpr annotation) {
     String annotationName = annotation.getNameAsString();
+
+    // Never preserve @Override, since it causes compile errors but does not fix them.
+    if ("Override".equals(annotationName)) {
+      annotation.remove();
+      return;
+    }
+
+    // If the annotation can be resolved, find its qualified name to prevent removal
+    boolean isResolved = true;
+    try {
+      annotationName = annotation.resolve().getQualifiedName();
+    } catch (UnsolvedSymbolException ex) {
+      isResolved = false;
+    }
+
     if (!UnsolvedSymbolVisitor.isAClassPath(annotationName)) {
       if (!classToFullClassName.containsKey(annotationName)) {
         // An annotation not imported and from the java.lang package is not our concern.
-        // Never preserve @Override, since it causes compile errors but does not fix them.
-        if (!JavaLangUtils.isJavaLangName(annotationName) || "Override".equals(annotationName)) {
+        if (!JavaLangUtils.isJavaLangName(annotationName)) {
           annotation.remove();
         }
         return;
       }
       annotationName = classToFullClassName.get(annotationName);
     }
-    if (!classToJarPath.containsKey(annotationName)) {
+
+    if (!isResolved && !classToJarPath.containsKey(annotationName)) {
       annotation.remove();
     } else {
       solvedAnnotationFullName.add(annotationName);

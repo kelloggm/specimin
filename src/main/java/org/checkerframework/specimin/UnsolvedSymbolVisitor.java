@@ -15,10 +15,12 @@ import com.github.javaparser.ast.body.Parameter;
 import com.github.javaparser.ast.body.TypeDeclaration;
 import com.github.javaparser.ast.body.VariableDeclarator;
 import com.github.javaparser.ast.comments.Comment;
+import com.github.javaparser.ast.expr.AnnotationExpr;
 import com.github.javaparser.ast.expr.Expression;
 import com.github.javaparser.ast.expr.FieldAccessExpr;
 import com.github.javaparser.ast.expr.InstanceOfExpr;
 import com.github.javaparser.ast.expr.LambdaExpr;
+import com.github.javaparser.ast.expr.MemberValuePair;
 import com.github.javaparser.ast.expr.MethodCallExpr;
 import com.github.javaparser.ast.expr.MethodReferenceExpr;
 import com.github.javaparser.ast.expr.NameExpr;
@@ -439,6 +441,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
   @Override
   public Visitable visit(PackageDeclaration node, Void arg) {
     this.currentPackage = node.getNameAsString();
+    processAnnotations(node.getAnnotations());
     return super.visit(node, arg);
   }
 
@@ -525,6 +528,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     maintainDataStructuresPreSuper(node);
     Visitable result = super.visit(node, arg);
     maintainDataStructuresPostSuper(node);
+    processAnnotations(node.getAnnotations());
     return result;
   }
 
@@ -533,6 +537,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     maintainDataStructuresPreSuper(node);
     Visitable result = super.visit(node, arg);
     maintainDataStructuresPostSuper(node);
+    processAnnotations(node.getAnnotations());
     return result;
   }
 
@@ -803,6 +808,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     // (why? ask whoever designed the feature...)
     for (Parameter lambdaParam : node.getParameters()) {
       localVariables.getFirst().add(lambdaParam.getNameAsString());
+      processAnnotations(lambdaParam.getAnnotations());
     }
 
     Visitable result = super.visit(node, p);
@@ -820,6 +826,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(VariableDeclarator decl, Void p) {
+    System.out.println(decl);
     boolean oldInsidePotentialUsedMember = insidePotentialUsedMember;
     // This part is to update the symbol table.
     boolean isAField =
@@ -952,6 +959,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   @Override
   public Visitable visit(FieldDeclaration node, Void arg) {
+    processAnnotations(node.getAnnotations());
     for (VariableDeclarator var : node.getVariables()) {
       String variableName = var.getNameAsString();
       String variableType = node.getElementType().asString();
@@ -998,6 +1006,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     typeVariables.removeFirst();
     insideTargetMember = oldInsideTargetMember;
     insidePotentialUsedMember = oldInsidePotentialUsedMember;
+    processAnnotations(node.getAnnotations());
     return result;
   }
 
@@ -1011,6 +1020,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
             + TargetMethodFinderVisitor.removeMethodReturnTypeAndAnnotations(
                 node.getDeclarationAsString(false, false, false));
     String methodSimpleName = node.getName().asString();
+    // Annotations are handled by processMethodDeclaration
     if (targetMethodsSignatures.contains(methodQualifiedSignature.replaceAll("\\s", ""))) {
       boolean oldInsideTargetMember = insideTargetMember;
       insideTargetMember = true;
@@ -1194,11 +1204,13 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
     insideTargetMember = true;
     Visitable result = super.visit(expr, p);
     insideTargetMember = oldInsideTargetMember;
+    processAnnotations(expr.getAnnotations());
     return result;
   }
 
   @Override
   public Visitable visit(ClassOrInterfaceType typeExpr, Void p) {
+    processAnnotations(typeExpr.getAnnotations());
     // Workaround for a JavaParser bug: When a type is referenced using its fully-qualified name,
     // like com.example.Dog dog, JavaParser considers its package components (com and com.example)
     // as types, too. This issue happens even when the source file of the Dog class is present in
@@ -1903,12 +1915,71 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
       }
     }
 
+    // Process any annotations that may be present in generic parameter types,
+    // like Collection<@KeyForBottom ? extends T> (check AnnoInGenericTargetTest)
+    for (Parameter param : node.getParameters()) {
+      Type paramType = param.getType();
+
+      // Handle arrays of generics
+      if (paramType.isArrayType()) {
+        paramType = paramType.asArrayType().getElementType();
+      }
+
+      // Generics are only available with class/interface types
+      if (paramType.isClassOrInterfaceType()) {
+        Optional<NodeList<Type>> typeArguments =
+            paramType.asClassOrInterfaceType().getTypeArguments();
+
+        if (!typeArguments.isPresent()) {
+          continue;
+        }
+
+        for (Type type : typeArguments.get()) {
+          processAnnotations(type.getAnnotations());
+        }
+      }
+    }
+
+    processAnnotations(node.getAnnotations());
+
     Set<String> currentLocalVariables = getParameterFromAMethodDeclaration(node);
     localVariables.addFirst(currentLocalVariables);
     Visitable result = super.visit(node, null);
     localVariables.removeFirst();
     typeVariables.removeFirst();
     return result;
+  }
+
+  /**
+   * Processes annotations by generating synthetic classes for unresolved annotations
+   *
+   * @param annotations The annotations to resolve
+   */
+  public void processAnnotations(NodeList<AnnotationExpr> annotations) {
+    for (AnnotationExpr anno : annotations) {
+      // If we can resolve the annotation, we do not need to generate a synthetic version
+      try {
+        anno.resolve();
+      } catch (UnsolvedSymbolException ex) {
+        UnsolvedClassOrInterface unsolvedAnnotation =
+            updateUnsolvedClassWithClassName(anno.getNameAsString(), false, false);
+
+        unsolvedAnnotation.setIsAnAnnotationToTrue();
+
+        // Add annotation parameters, but resolve the annotation parameters to Object;
+        // it doesn't matter what type they are synthetically generated as
+        if (anno.isNormalAnnotationExpr()) {
+          for (MemberValuePair pair : anno.toNormalAnnotationExpr().get().getPairs()) {
+            unsolvedAnnotation.addMethod(
+                new UnsolvedMethod(
+                    pair.getNameAsString(), "Object", Collections.emptyList(), true));
+          }
+        } else if (anno.isSingleMemberAnnotationExpr()) {
+          unsolvedAnnotation.addMethod(
+              new UnsolvedMethod("value", "Object", Collections.emptyList(), true));
+        }
+      }
+    }
   }
 
   /**
@@ -1947,7 +2018,7 @@ public class UnsolvedSymbolVisitor extends ModifierVisitor<Void> {
 
   /**
    * This method updates a synthetic file based on a solvable expression. The input expression is
-   * solvable because its data is in the jar files that Specimin taks as input.
+   * solvable because its data is in the jar files that Specimin takes as input.
    *
    * @param expr the expression to be used
    */
